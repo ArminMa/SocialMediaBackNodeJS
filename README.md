@@ -1,6 +1,6 @@
 # SocialMediaBackNodeJS
 
-## start the chat backend 
+## start the chat backend
     
 # start the MongoDB backend
 creat a folder for the mongo db then run mongo
@@ -10,6 +10,9 @@ creat a folder for the mongo db then run mongo
     Linux
     mongod --port 27017 --dbpath C:/Program1/MongoDB/data/db
     
+
+## go to source folder and type
+    node install --save
+    
 #run app, go to source folder and type
- 
     node chat_server.js
