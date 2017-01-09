@@ -2,18 +2,15 @@
 "use strict";
 /**Global variables*/
 process.title = 'node-chat';
-const webSocketsServerChatPort = 5092;
-const webSocketChatServerServer = require('websocket').server;
 
-const webSocketsServerGroupPort = 5091;
-const webSocketGroupServerServer = require('websocket').server;
+
 
 
 var connectedUsers = [];
-var UserInfoO = require('./models/UserInfo'); // get our mongoose model
-var UserGroups = require('./models/db_goups'); // get our mongoose model
-var User = require('./models/user'); // get our mongoose model
 
+var UserGroups = require('./models/db_groups'); // get our mongoose model
+var User = require('./models/user'); // get our mongoose model
+var UserInfo = require('./models/UserInfo');
 const http = require('http');
 const finalhandler = require('finalhandler');
 const serveStatic = require('serve-static');
@@ -26,139 +23,10 @@ function htmlEntities(str) {
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+const webSocketsServerGroupPort = 5091;
+const webSocketGroupServerServer = require('websocket').server;
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/**WebSocket serverChat 5092*/
-var serverChat = http.createServer(function(request, response) {
-    var done = finalhandler(request, response);
-    serve(request, response, done);
-});
-serverChat.listen(webSocketsServerChatPort, function() {
-    console.log((new Date()) + " Server is listening on webSocketsServerChatPort " + webSocketsServerChatPort);
-});
-var wsChatServer = new webSocketChatServerServer({
-    // WebSocket serverChat is tied to a HTTP serverChat. WebSocket request is just
-    // an enhanced HTTP request. For more info http://tools.ietf.org/html/rfc6455#page-6
-    httpServer: serverChat
-});
-
-
-// This callback function is called every time someone
-// tries to connect to the WebSocket serverChat
-wsChatServer.on('request', function(request) {
-    console.log((new Date()) + ' Connection from origin ' + request.origin + '.');
-    console.log('serverChat Port = ' + webSocketsServerChatPort );
-    // accept connection - you should check 'request.origin' to make sure that
-    // client is connecting from your website
-    // (http://en.wikipedia.org/wiki/Same_origin_policy)
-    var connection = request.accept(null, request.origin);
-
-    // we need to know client index to remove them on 'close' event
-    var index = users.push(connection) - 1;
-    var userName = false;
-    var userColor = false;
-
-    console.log((new Date()) + ' Connection accepted.');
-
-    // send back chat history
-    // if (history.length > 0) {
-    //     connection.sendUTF(JSON.stringify({ type: 'history', data: history }));
-    // }
-
-    // user sent some message
-    connection.on('message', function(message) {
-        if (message.type === 'JsonUtf8') { // accept only text
-            if (userName === false) { // first message sent by user is their name
-
-                try {
-                    var json = JSON.parse(message.data);
-                } catch (e) {
-                    console.log('This doesn\'t look like a valid JSON: ', message.data);
-                    return;
-                }
-
-                userName = htmlEntities(message.utf8Data);
-                // get random color and send it back to the user
-                // userColor = colors.shift();
-                connection.sendUTF(JSON.stringify({ type: 'color', data: userColor }));
-                console.log((new Date()) + ' User is known as: ' + userName +
-                    ' with ' + userColor + ' color.');
-
-            } else { // log and broadcast the message
-                console.log((new Date()) + ' Received Message from ' +
-                    userName + ': ' + message.utf8Data);
-
-                // we want to keep history of all sent messages
-                var obj = {
-                    time: (new Date()).getTime(),
-                    text: htmlEntities(message.utf8Data),
-                    author: userName,
-                    color: userColor
-                };
-                history.push(obj);
-                history = history.slice(-100);
-
-                // broadcast message to all connected users
-                var json = JSON.stringify({ type: 'message', data: obj });
-                for (var i = 0; i < users.length; i++) {
-                    users[i].sendUTF(json);
-                }
-            }
-        }
-    });
-
-    // user disconnected
-    connection.on('close', function(connection) {
-        if (userName !== false && userColor !== false) {
-            console.log((new Date()) + " Peer " +
-                connection.remoteAddress + " disconnected.");
-            // remove user from the list of connected users
-            users.splice(index, 1);
-            // push back user's color to be reused by another user
-            colors.push(userColor);
-        }
-    });
-
-});
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-/**WebSocket serverChat 5091*/
+/**WebSocket serverGroup 5091*/
 var serverGroup = http.createServer(function(request, response) {
     var done = finalhandler(request, response);
     serve(request, response, done);
@@ -178,65 +46,78 @@ serverGroup.listen(webSocketsServerGroupPort, function() {
 wsGroupServer.on('request', function(request) {
 
     console.log((new Date()) + ' Connection from origin ' + request.origin + '.');
-    console.log('serverChat Port = ' + webSocketsServerGroupPort );
     var connection = request.accept(null, request.origin);
-    console.log('Connection accepted, users.length = ' + users.length + ' , index = ' + index);
+    console.log('Connection accepted, users.length = ' + connectedUsers.length);
     // user sent some message
 
     // user send a message
     connection.on('message', function(message) {
-        console.log("received data from client: " + message.toString() + ' , index = ' + index);
+        console.log("received data from client: " + JSON.stringify(message));
 
         // var isTheUserRegisterd = users[index].getUsername();
         var sender = getUserBySocketHandler(connection);
-        var received_msg = null;
         // register user if not in memory
         if(sender == null) {
-            received_msg = JSON.parse(message.data);
-            var userInit = new UserInfoO(received_msg.username, received_msg.password, connection);
-            connectedUsers.push(userInit);
-            console.log("connectedUsers size = " + connectedUsers.length);
-            console.log("connectedUsers size = " + userInit.getAsJsonString());
+            try {
+                console.log("message.utf8Data: " + message.utf8Data);
+                var mynewJsonObject = JSON.parse(message.utf8Data);
+                var userInformation = new UserInfo(mynewJsonObject.username);
+                userInformation.setPassword(mynewJsonObject.password);
+                userInformation.setSocket(connection);
+                connectedUsers.push(userInformation);
+                console.log("connectedUsers size = " + connectedUsers.length);
+            } catch (e) {
+                console.log('This doesn\'t look like a valid JSON: ' + message.utf8Data);
+                return;
+            }
         }else{ // user registered assume wanting to create group
-            // Group group = createGroup(sender, data.toString());
-            // logger.info("group created");
-            // // save the group in the MongoDB
-            // mongoClient.insert(GROUP_COLLECTION, group.toJson(), handler -> {
-            received_msg = JSON.parse(message.data);
-            var userToChatWith = {
-                username:received_msg.username,
-                password:received_msg.password
-            };
-            var group = new UserGroups();
-            group.putUser(received_msg.username);
-            group.putUser(sender.username);
+            var userNameToChatWith = JSON.parse(message.utf8Data);
 
+
+            var group =  new UserGroups({
+                'users': [{"username":sender.getUsername()},{"username":userNameToChatWith.username} ]
+
+            });
+            group.save(function(err, result) {
+                if(err){console.log('EEEEEEEEEEEEEEEEEERRRRRRRRRRRRRRROOOOOOOORRRRRR when trying to save the userGrup');}
+                if (!result) return null;
+                else{
+                    console.log('User saved successfully result._id = '+ result._id);
+                    var newGroupId = result._id;
+                    console.log('newGroupId after saveGroup = '+ newGroupId);
+                    connection.sendUTF(JSON.stringify({ 'groupid': newGroupId }));
+                    var mynewJsonObject = JSON.parse(message.utf8Data);
+                    var userNameObject = new UserInfo(mynewJsonObject.username);
+                    console.log('user to chat with = ' + userNameObject.getUsername());
+                    for(var index=0; index < connectedUsers.length; index++ ){
+                        var userObject = connectedUsers[index];
+                        console.log('in the loop. userObject.getUsername() = ' + userObject.getUsername());
+                        if(userObject.getUsername() == userNameObject.getUsername()){
+                            console.log('in the if. equals successfull. userObject.getUsername() = ' + userObject.getUsername());
+                            userObject.getSocket().sendUTF(JSON.stringify({ 'groupid': newGroupId }));
+                        }
+
+                    }
+                }
+            });
         }
     });
 
     // user disconnected
-    connection.on('close', function(connection) {
-        if (userName !== false && userColor !== false) {
-            console.log((new Date()) + " Peer " +
-                connection.remoteAddress + " disconnected.");
-            // remove user from the list of connected users
-            users.splice(index, 1);
-            // push back user's color to be reused by another user
-            colors.push(userColor);
+    connection.on('close', function(event) {
+        var closer = getUserBySocketHandler(connection);
+        for(var index = 0; index < connectedUsers.length; index++){
+            if(connectedUsers[index].getSocket() == closer.getSocket()){
+                console.log("in the close if ");
+                connectedUsers.splice(index, 1);
+            }
         }
+
+        console.log("removed user: connectedUsers = " + connectedUsers.length);
     });
 
-    connection.on('open', function(connection) {
-        //login user
-        var myuser = {
-            username:userName,
-            password:password
-        };
-        wSocket.send(JSON.stringify(myuser));
-    });
-
-    wSocket.onerror = function(){
-        alert("Fel!");
+    connection.onerror = function(){
+        console.log("Error connection.onerror??????")
     };
 
 });
@@ -245,12 +126,13 @@ wsGroupServer.on('request', function(request) {
 
 function getUserBySocketHandler(socket) {
     var index;
-    if(users.length == 0){return null}
+    if(connectedUsers.length == 0){return null}
     else{
-        for (index = 0; index < users.length; ++index) {
-            if(users[index].getSocket().remoteAddress() == socket.remoteAddress())
+        for (index = 0; index < connectedUsers.length; ++index) {
+
+            if(connectedUsers[index].getSocket() == socket )
             {
-                return users[index];
+                return connectedUsers[index];
             }
         }
         return null;
@@ -258,6 +140,95 @@ function getUserBySocketHandler(socket) {
 
 }
 
+
+/**
+ *
+ * webSocketChatServer
+ *
+ *
+ *
+ */
+const webSocketsServerChatPort = 5092;
+const webSocketChatServer = require('websocket').server;
+
+/**WebSocket serverChat 5092*/
+var serverChat= http.createServer(function(request, response) {
+    var done = finalhandler(request, response);
+    serve(request, response, done);
+});
+var wsChatServer = new webSocketChatServer({
+    // WebSocket serverChat is tied to a HTTP serverChat. WebSocket request is just
+    // an enhanced HTTP request. For more info http://tools.ietf.org/html/rfc6455#page-6
+    httpServer: serverGroup
+});
+serverChat.listen(webSocketsServerChatPort, function() {
+    console.log((new Date()) + " Server is listening on webSocketsServerChatPort " + webSocketsServerChatPort);
+});
+
+
+// This callback function is called every time someone
+// tries to connect to the WebSocket serverChat
+wsGroupServer.on('request', function(request) {
+    console.log((new Date()) + ' Connection from origin ' + request.origin + '.');
+    var connection = request.accept(null, request.origin);
+    console.log('Connection accepted, users.length = ' + connectedUsers.length);
+    // user sent some message
+
+    // user send a message
+    connection.on('message', function(message) {
+        console.log("received data from client: " + JSON.stringify(message));
+        var mynewJsonObject = JSON.parse(message.utf8Data);
+        var messagePojo = {
+            'groupid':mynewJsonObject.groupid,
+            'message':mynewJsonObject.message,
+            'sendername':mynewJsonObject.sendername
+        }
+
+
+
+        User.findOne({"id": req.body.id}, function(err, user) {
+
+            if (err) throw err;
+
+            if (!user) {
+                res.json({ success: false, message: 'Authentication failed. User not found.' });
+            } else if (user) {
+
+                // check if password matches
+                if (user.password != req.body.password) {
+                    res.json({ success: false, message: 'Authentication failed. Wrong password.' });
+                } else {
+
+                    // if user is found and password is right
+                    // create a token
+                    var token = jwt.sign(user, app.get('tokenSigningKey'), {
+                        expiresIn: 86400 // expires in 24 hours
+                    });
+
+                    res.json({
+                        success: true,
+                        message: 'Enjoy your token!',
+                        token: token
+                    });
+                }
+
+            }
+
+        });
+
+
+    });
+
+    // user disconnected
+    connection.on('close', function(event) {
+        console.log("group something");
+    });
+
+    connection.onerror = function(){
+        console.log("Error connection.onerror??????")
+    };
+
+});
 
 
 
@@ -317,51 +288,13 @@ app.use(morgan('dev'));
 // =================================================================
 
 
-function saveUser(groupObject) {
+function saveGroup(groupObject) {
 
-    var query = { "username": theUserToSave.username },
-        update = {
-            "username": theUserToSave.username,
-            "email": req.body.email,
-            "password": req.body.password,
-            "token": req.header(app.get('tokenHeader')),
-            "authorities": req.body.authorities,
-            "index": -1,
-            "online":false },
-        options = { upsert: true };
-
-    User.findOneAndUpdate(query, update, options, function(error, result) {
-        if (!error) {
-            // If the document doesn't exist
-            if (!result) {
-                // Create it
-                result = new User({
-                    "id": req.body.id,
-                    "username": req.body.username,
-                    "email": req.body.email,
-                    "password": req.body.password,
-                    "token": req.header(app.get('tokenHeader')),
-                    "authorities": req.body.authorities,
-                    "index": -1,
-                    "online":false
-                });
+    // call the built-in save method to save to the database
 
 
-            }
-            // Save the document
-            result.save(function(err) {
-                if (err){
-                    res.json({ success: false , message : 'err = ' + err});
-                    throw err; }
-                else if( typeof result !== 'undefined' && result ){
-                    req.decoded =  result;
-                    // res.setHeader(app.get('tokenSigningKey'), "Bearer " + token );
-                    return res.status(200).send({ success: true , message : 'userFromToken = ' + result.toString()});
-                }
-            });
-        }
-    });
 }
+
 
 
 // ---------------------------------------------------------
@@ -384,6 +317,10 @@ app.post('/save', function(req, res) {
     //     "online":false
     //
     // });
+
+
+
+
 
 
 
@@ -573,33 +510,7 @@ function getQueryVariable(encodedBodyString) {
             return decodeURIComponent(pair[1]);
         }
     }
-    console.log('Query variable %s not found', encodedBodyString);
+
 }
 
-
-
-
-
-// basic route (http://localhost:1337)
-app.get('/', function(req, res) {
-    res.send.json('Hello! The API is at http://localhost:' + mongoDbPort + '/api');
-});
-
-apiRoutes.get('/users', function(req, res) {
-    User.find({}, function(err, users) {
-        res.json(users);
-    });
-});
-
-apiRoutes.get('/check', function(req, res) {
-    res.json(req.decoded);
-});
-
-app.use('/api', apiRoutes);
-
-// =================================================================
-// start the serverChat ================================================
-// =================================================================
-app.listen(mongoDbPort);
-console.log('Magic happens at http://localhost:' + mongoDbPort);
 

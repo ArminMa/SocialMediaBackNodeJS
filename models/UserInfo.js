@@ -4,12 +4,12 @@ var username ='';
 var email ='';
 
 // Constructor
-function UserInfo( username, password, usersSocket) {
-    // always initialize all instance properties
-    this.userSocket = usersSocket;
-    this.password =password;
-    this.username =username;
-}
+// function UserInfo( username, password, usersSocket) {
+//     // always initialize all instance properties
+//     this.userSocket = usersSocket;
+//     this.password =password;
+//     this.username =username;
+// }
 function UserInfo( username) {
     // always initialize all instance properties
     this.username =username;
