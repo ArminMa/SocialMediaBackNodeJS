@@ -7,10 +7,11 @@ process.title = 'node-chat';
 
 
 var connectedUsers = [];
-
+var groups = [];
 var UserGroups = require('./models/db_groups'); // get our mongoose model
 var User = require('./models/user'); // get our mongoose model
 var UserInfo = require('./models/UserInfo');
+var Group = require('./models/Group');
 const http = require('http');
 const finalhandler = require('finalhandler');
 const serveStatic = require('serve-static');
@@ -159,7 +160,7 @@ var serverChat= http.createServer(function(request, response) {
 var wsChatServer = new webSocketChatServer({
     // WebSocket serverChat is tied to a HTTP serverChat. WebSocket request is just
     // an enhanced HTTP request. For more info http://tools.ietf.org/html/rfc6455#page-6
-    httpServer: serverGroup
+    httpServer: serverChat
 });
 serverChat.listen(webSocketsServerChatPort, function() {
     console.log((new Date()) + " Server is listening on webSocketsServerChatPort " + webSocketsServerChatPort);
@@ -168,70 +169,105 @@ serverChat.listen(webSocketsServerChatPort, function() {
 
 // This callback function is called every time someone
 // tries to connect to the WebSocket serverChat
-wsGroupServer.on('request', function(request) {
+
+wsChatServer.on('request', function(request) {
     console.log((new Date()) + ' Connection from origin ' + request.origin + '.');
-    var connection = request.accept(null, request.origin);
+    var connectionChat = request.accept(null, request.origin);
     console.log('Connection accepted, users.length = ' + connectedUsers.length);
     // user sent some message
 
     // user send a message
-    connection.on('message', function(message) {
+    connectionChat.on('message', function(message) {
         console.log("received data from client: " + JSON.stringify(message));
         var mynewJsonObject = JSON.parse(message.utf8Data);
         var messagePojo = {
             'groupid':mynewJsonObject.groupid,
             'message':mynewJsonObject.message,
             'sendername':mynewJsonObject.sendername
-        }
+        };
 
 
+        var group = findGroup(messagePojo.groupid);
 
-        User.findOne({"id": req.body.id}, function(err, user) {
+        if(group== null){
+            // UserGroups.find({"_id": messagePojo.groupid}).lean().exec(function (err, result) {
+            //     console.log('JSON.stringify(result) = ' + JSON.stringify(result));
+            // });
+            console.log('search in Mongo DB messagePojo.groupid = ' + messagePojo.groupid);
+            UserGroups.findOne({"_id": messagePojo.groupid }, function(err, result) {
 
-            if (err) throw err;
-
-            if (!user) {
-                res.json({ success: false, message: 'Authentication failed. User not found.' });
-            } else if (user) {
-
-                // check if password matches
-                if (user.password != req.body.password) {
-                    res.json({ success: false, message: 'Authentication failed. Wrong password.' });
-                } else {
-
-                    // if user is found and password is right
-                    // create a token
-                    var token = jwt.sign(user, app.get('tokenSigningKey'), {
-                        expiresIn: 86400 // expires in 24 hours
-                    });
-
-                    res.json({
-                        success: true,
-                        message: 'Enjoy your token!',
-                        token: token
-                    });
+                if (err){
+                    console.log('returning result failed');
+                    throw err;
                 }
 
+                if (!result) {
+                    console.log('group not found in DB');
+                    return;
+                } else {
+                    var username1 = result.users[0].username;
+                    var username2 = result.users[1].username;
+                    var userPojo1 = new UserInfo(username1);
+                    var userPojo2 = new UserInfo(username2);
+
+                    var userSender = new UserInfo(messagePojo.sendername);
+                    console.log('sender name = ' + messagePojo.sendername);
+                    if(userPojo1.getUsername() == userSender.getUsername()){
+                        console.log('user1 is sender');
+                        userPojo1.setSocket(connectionChat);
+                    } else if (userPojo2.getUsername() == userSender.getUsername()){
+                        console.log("user2 is sender");
+                        userPojo2.setSocket(connectionChat);
+                    }
+                    var groupToPushInArray = new Group(userPojo1, userPojo2);
+                    groupToPushInArray.setId(result._id);
+                    console.log('group id = ' + groupToPushInArray.getId());
+                    groups.push(groupToPushInArray);
+                    console.log('success: group size = ' + groups.length);
+                }
+            });
+        } else {
+            var userSender = new UserInfo(messagePojo.sendername);
+            if (group.getUserInfo1().getUsername() == userSender.getUsername()) {
+                if (group.getUserInfo1().getSocket() == null) {
+                    console.log('user1 socket set');
+                    group.getUserInfo1().setSocket(connectionChat);
+                }
             }
-
-        });
-
+            else if(group.getUserInfo2().getUsername() == userSender.getUsername()) {
+                if (group.getUserInfo2().getSocket() == null) {
+                    console.log('user2 socket set');
+                    group.getUserInfo2().setSocket(connectionChat);
+                }
+            }
+            group.getUserInfo1().getSocket().sendUTF(userSender.getUsername() +'@ '+ messagePojo.message);
+            group.getUserInfo2().getSocket().sendUTF(userSender.getUsername() +'@ '+ messagePojo.message);
+        }
 
     });
 
     // user disconnected
-    connection.on('close', function(event) {
+    connectionChat.on('close', function(event) {
         console.log("group something");
     });
 
-    connection.onerror = function(){
+    connectionChat.onerror = function(){
         console.log("Error connection.onerror??????")
     };
 
 });
 
 
-
+function findGroup(groupid) {
+    var theGroup = new Group();
+    theGroup.setId(groupid);
+    for(var index=0; index < groups.length; index++){
+        if(groups[index].getId() == theGroup.getId()){
+            return groups[index];
+        }
+    }
+    return null;
+}
 
 
 
