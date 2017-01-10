@@ -248,17 +248,6 @@ wsChatServer.on('request', function(request) {
 
     });
 
-
-
-    // var closer = getUserBySocketHandler(connection);
-    // for(var index = 0; index < connectedUsers.length; index++){
-    //     if(connectedUsers[index].getSocket() == closer.getSocket()){
-    //         console.log("in the close if ");
-    //         connectedUsers.splice(index, 1);
-    //     }
-    // }
-    // groups.user1 groups.user2
-
     // user disconnected
     connectionChat.on('close', function(event) {
         console.log("user disconnected from group");
