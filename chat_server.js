@@ -232,23 +232,54 @@ wsChatServer.on('request', function(request) {
                 if (group.getUserInfo1().getSocket() == null) {
                     console.log('user1 socket set');
                     group.getUserInfo1().setSocket(connectionChat);
+                    return;
                 }
             }
             else if(group.getUserInfo2().getUsername() == userSender.getUsername()) {
                 if (group.getUserInfo2().getSocket() == null) {
                     console.log('user2 socket set');
                     group.getUserInfo2().setSocket(connectionChat);
+                    return;
                 }
             }
-            group.getUserInfo1().getSocket().sendUTF(userSender.getUsername() +'@ '+ messagePojo.message);
-            group.getUserInfo2().getSocket().sendUTF(userSender.getUsername() +'@ '+ messagePojo.message);
+            group.getUserInfo1().getSocket().sendUTF(messagePojo.sendername +'@ '+ messagePojo.message);
+            group.getUserInfo2().getSocket().sendUTF(messagePojo.sendername +'@ '+ messagePojo.message);
         }
 
     });
 
+
+
+    // var closer = getUserBySocketHandler(connection);
+    // for(var index = 0; index < connectedUsers.length; index++){
+    //     if(connectedUsers[index].getSocket() == closer.getSocket()){
+    //         console.log("in the close if ");
+    //         connectedUsers.splice(index, 1);
+    //     }
+    // }
+    // groups.user1 groups.user2
+
     // user disconnected
     connectionChat.on('close', function(event) {
-        console.log("group something");
+        console.log("user disconnected from group");
+        var userSender = new UserInfo("");
+        userSender.setSocket(connectionChat);
+        for(var index = 0; index < groups.length; index++) {
+            if(groups[index].getUserInfo1().getSocket() == userSender.getSocket()){
+                groups[index].getUserInfo2().getSocket().sendUTF(groups[index].getUserInfo1().getUsername() +'@ '+ ' has left the chat');
+                groups.splice(index, 1);
+                console.log("connected groups = " + groups.length);
+                return;
+            }
+            if(groups[index].getUserInfo2().getSocket() == userSender.getSocket()){
+                groups[index].getUserInfo1().getSocket().sendUTF(groups[index].getUserInfo2().getUsername() +'@ '+ ' has left the chat');
+                groups.splice(index, 1);
+                console.log("connected groups = " + groups.length);
+                return;
+            }
+        }
+
+
     });
 
     connectionChat.onerror = function(){
